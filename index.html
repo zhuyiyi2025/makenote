@@ -1,0 +1,592 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>马克笔记</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --sidebar-w: 280px;
+      --bg: #f7f6f4;
+      --sidebar-bg: #f0eeeb;
+      --border: #e2e0dd;
+      --text: #2c2c2c;
+      --text-muted: #8a8a8a;
+      --accent: #4a6cf7;
+      --accent-hover: #3a5ce5;
+      --danger: #e74c3c;
+      --radius: 8px;
+    }
+    html, body { height: 100%; font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; background: var(--bg); color: var(--text); }
+    .app { display: flex; height: 100vh; overflow: hidden; }
+
+    /* Sidebar */
+    .sidebar { width: var(--sidebar-w); min-width: var(--sidebar-w); background: var(--sidebar-bg); border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; }
+    .sidebar-header { padding: 20px 16px 12px; display: flex; align-items: center; justify-content: space-between; }
+    .sidebar-header h1 { font-size: 18px; font-weight: 700; }
+    .btn-new { background: var(--accent); color: #fff; border: none; border-radius: var(--radius); padding: 6px 14px; font-size: 13px; font-weight: 600; cursor: pointer; transition: background .15s; }
+    .btn-new:hover { background: var(--accent-hover); }
+    .search-box { padding: 0 16px 12px; }
+    .search-box input { width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius); font-size: 13px; background: #fff; outline: none; transition: border-color .15s; }
+    .search-box input:focus { border-color: var(--accent); }
+    .note-list { flex: 1; overflow-y: auto; padding: 0 8px 16px; }
+    .note-list::-webkit-scrollbar { width: 4px; }
+    .note-list::-webkit-scrollbar-thumb { background: #ccc; border-radius: 2px; }
+    .note-item { padding: 12px 14px; border-radius: var(--radius); cursor: pointer; transition: background .12s; position: relative; margin-bottom: 2px; }
+    .note-item:hover { background: #e8e6e3; }
+    .note-item.active { background: #dde4ff; }
+    .note-item-title { font-size: 14px; font-weight: 600; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .note-item-preview { font-size: 12px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 4px; }
+    .note-item-date { font-size: 11px; color: var(--text-muted); }
+    .note-item .btn-delete { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; color: var(--text-muted); font-size: 16px; cursor: pointer; opacity: 0; transition: opacity .15s, color .15s; padding: 4px 6px; border-radius: 4px; }
+    .note-item:hover .btn-delete { opacity: 1; }
+    .note-item .btn-delete:hover { color: var(--danger); background: #fde8e8; }
+    .empty-list { text-align: center; color: var(--text-muted); font-size: 13px; padding: 40px 20px; }
+
+    /* Main */
+    .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; background: #fff; }
+    .main-header { padding: 16px 24px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 12px; }
+    .main-header .title-input { flex: 1; font-size: 20px; font-weight: 700; border: none; outline: none; background: transparent; color: var(--text); }
+    .main-header .title-input::placeholder { color: var(--text-muted); }
+    .main-header .btn-save { background: var(--accent); color: #fff; border: none; border-radius: var(--radius); padding: 7px 18px; font-size: 13px; font-weight: 600; cursor: pointer; transition: background .15s; }
+    .main-header .btn-save:hover { background: var(--accent-hover); }
+    .editor { flex: 1; padding: 24px; overflow-y: auto; }
+    .editor textarea { width: 100%; height: 100%; border: none; outline: none; resize: none; font-size: 15px; line-height: 1.8; font-family: inherit; color: var(--text); background: transparent; }
+    .editor textarea::placeholder { color: var(--text-muted); }
+    .empty-main { flex: 1; display: flex; align-items: center; justify-content: center; color: var(--text-muted); font-size: 15px; flex-direction: column; gap: 12px; }
+    .empty-main .icon { font-size: 48px; opacity: .3; }
+    .status-bar { padding: 6px 24px; border-top: 1px solid var(--border); font-size: 11px; color: var(--text-muted); display: flex; justify-content: space-between; }
+    .toast { position: fixed; bottom: 24px; right: 24px; background: #333; color: #fff; padding: 10px 20px; border-radius: var(--radius); font-size: 13px; opacity: 0; transform: translateY(10px); transition: opacity .25s, transform .25s; pointer-events: none; z-index: 999; }
+    .toast.show { opacity: 1; transform: translateY(0); }
+    .btn-back { display: none; background: none; border: none; font-size: 20px; cursor: pointer; padding: 4px 8px; border-radius: 4px; }
+    .btn-back:hover { background: var(--border); }
+
+    /* Test panel */
+    .test-panel { position: fixed; top: 0; right: 0; width: 420px; max-width: 100%; height: 100vh; background: #fff; border-left: 1px solid var(--border); box-shadow: -2px 0 12px rgba(0,0,0,.08); z-index: 1000; display: flex; flex-direction: column; transform: translateX(100%); transition: transform .25s; }
+    .test-panel.open { transform: translateX(0); }
+    .test-panel-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+    .test-panel-header h2 { font-size: 16px; font-weight: 700; }
+    .test-panel-close { background: none; border: none; font-size: 20px; cursor: pointer; padding: 4px 8px; border-radius: 4px; }
+    .test-panel-close:hover { background: var(--border); }
+    .test-panel-body { flex: 1; overflow-y: auto; padding: 16px 20px; }
+    .test-suite { margin-bottom: 16px; }
+    .test-suite-title { font-size: 13px; font-weight: 700; margin-bottom: 6px; padding-bottom: 4px; border-bottom: 2px solid var(--accent); }
+    .test-item { padding: 5px 10px; margin-bottom: 2px; border-radius: 4px; font-size: 12px; display: flex; align-items: center; gap: 8px; }
+    .test-item.pass { background: #e8f5e9; color: #2e7d32; }
+    .test-item.fail { background: #ffebee; color: #c62828; }
+    .test-item .icon { font-weight: 700; width: 16px; text-align: center; }
+    .test-summary { margin-top: 12px; padding: 12px; border-radius: 6px; font-size: 14px; font-weight: 600; }
+    .test-summary.all-pass { background: #e8f5e9; color: #2e7d32; }
+    .test-summary.has-fail { background: #ffebee; color: #c62828; }
+    .btn-test { background: #6c5ce7; color: #fff; border: none; border-radius: var(--radius); padding: 5px 12px; font-size: 12px; font-weight: 600; cursor: pointer; margin-top: 8px; transition: background .15s; }
+    .btn-test:hover { background: #5a4bd6; }
+
+    @media (max-width: 640px) {
+      .sidebar { width: 100%; min-width: 0; }
+      .main { display: none; }
+      .app.sidebar-open .sidebar { display: none; }
+      .app.sidebar-open .main { display: flex; }
+      .main-header .btn-back { display: block; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app" id="app">
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <h1>📒 马克笔记</h1>
+        <button class="btn-new" id="btn-new" title="新建笔记">+ 新建</button>
+      </div>
+      <div class="search-box">
+        <input type="text" id="search-input" placeholder="搜索笔记..." />
+      </div>
+      <div class="note-list" id="note-list">
+        <div class="empty-list">暂无笔记，点击"新建"开始</div>
+      </div>
+      <button class="btn-test" id="btn-test">🧪 运行测试</button>
+    </aside>
+    <main class="main" id="main">
+      <div class="empty-main" id="empty-main">
+        <div class="icon">📝</div>
+        <div>选择或新建一个笔记</div>
+      </div>
+      <div id="editor-area" style="display:none; flex-direction:column; flex:1; overflow:hidden;">
+        <div class="main-header">
+          <button class="btn-back" id="btn-back" title="返回列表">←</button>
+          <input class="title-input" id="note-title" placeholder="无标题笔记" />
+          <button class="btn-save" id="btn-save">保存</button>
+        </div>
+        <div class="editor">
+          <textarea id="note-content" placeholder="开始写作..."></textarea>
+        </div>
+        <div class="status-bar">
+          <span id="status-info">就绪</span>
+          <span id="word-count">0 字</span>
+        </div>
+      </div>
+    </main>
+  </div>
+  <div class="toast" id="toast"></div>
+  <div class="test-panel" id="test-panel">
+    <div class="test-panel-header">
+      <h2>🧪 测试结果</h2>
+      <button class="test-panel-close" id="test-panel-close">✕</button>
+    </div>
+    <div class="test-panel-body" id="test-results"></div>
+  </div>
+
+<script>
+(function() {
+  "use strict";
+  window.alert = function() {};
+
+  var STORAGE_KEY = "mark_notes_v1";
+
+  function loadNotes() {
+    try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; }
+    catch(e) { return []; }
+  }
+
+  function saveNotes(notes) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(notes));
+  }
+
+  function createNote(title, content) {
+    var now = Date.now();
+    return {
+      id: "n_" + now + "_" + Math.random().toString(36).slice(2, 8),
+      title: (title || "").trim(),
+      content: content || "",
+      updatedAt: now,
+      createdAt: now
+    };
+  }
+
+  var notes = loadNotes();
+  var activeId = null;
+  var editing = false;
+
+  var $noteList   = document.getElementById("note-list");
+  var $emptyMain  = document.getElementById("empty-main");
+  var $editorArea = document.getElementById("editor-area");
+  var $titleInput = document.getElementById("note-title");
+  var $content    = document.getElementById("note-content");
+  var $btnNew     = document.getElementById("btn-new");
+  var $btnSave    = document.getElementById("btn-save");
+  var $btnBack    = document.getElementById("btn-back");
+  var $search     = document.getElementById("search-input");
+  var $statusInfo = document.getElementById("status-info");
+  var $wordCount  = document.getElementById("word-count");
+  var $toast      = document.getElementById("toast");
+  var $app        = document.getElementById("app");
+  var $testPanel  = document.getElementById("test-panel");
+  var $testResults = document.getElementById("test-results");
+  var $btnTest    = document.getElementById("btn-test");
+  var $testPanelClose = document.getElementById("test-panel-close");
+
+  function formatDate(ts) {
+    var d = new Date(ts);
+    var pad = function(n) { return String(n).padStart(2, "0"); };
+    return d.getFullYear() + "-" + pad(d.getMonth()+1) + "-" + pad(d.getDate()) + " " + pad(d.getHours()) + ":" + pad(d.getMinutes());
+  }
+
+  function showToast(msg) {
+    $toast.textContent = msg;
+    $toast.classList.add("show");
+    setTimeout(function() { $toast.classList.remove("show"); }, 2000);
+  }
+
+  function updateWordCount() {
+    var len = $content.value.length;
+    $wordCount.textContent = len + " 字";
+  }
+
+  function esc(s) {
+    var d = document.createElement("div");
+    d.textContent = s;
+    return d.innerHTML;
+  }
+
+  function renderList(filter) {
+    filter = (filter || "").toLowerCase();
+    var filtered = notes
+      .filter(function(n) {
+        return n.title.toLowerCase().indexOf(filter) !== -1 || n.content.toLowerCase().indexOf(filter) !== -1;
+      })
+      .sort(function(a, b) { return b.updatedAt - a.updatedAt; });
+
+    if (filtered.length === 0) {
+      $noteList.innerHTML = "<div class=\"empty-list\">" + (filter ? "未找到匹配的笔记" : "暂无笔记，点击\"新建\"开始") + "</div>";
+      return;
+    }
+
+    $noteList.innerHTML = filtered.map(function(n) {
+      var preview = n.content.slice(0, 60).replace(/\n/g, " ") || "无内容";
+      var title = n.title || "无标题笔记";
+      var cls = n.id === activeId ? "note-item active" : "note-item";
+      return "<div class=\"" + cls + "\" data-id=\"" + n.id + "\">" +
+        "<div class=\"note-item-title\">" + esc(title) + "</div>" +
+        "<div class=\"note-item-preview\">" + esc(preview) + "</div>" +
+        "<div class=\"note-item-date\">" + formatDate(n.updatedAt) + "</div>" +
+        "<button class=\"btn-delete\" data-id=\"" + n.id + "\" title=\"删除\">✕</button>" +
+        "</div>";
+    }).join("");
+  }
+
+  function selectNote(id) {
+    activeId = id;
+    var note = null;
+    for (var i = 0; i < notes.length; i++) {
+      if (notes[i].id === id) { note = notes[i]; break; }
+    }
+    if (!note) return;
+
+    $emptyMain.style.display = "none";
+    $editorArea.style.display = "flex";
+    $titleInput.value = note.title;
+    $content.value = note.content;
+    editing = false;
+    updateWordCount();
+    $statusInfo.textContent = "已打开";
+    renderList($search.value);
+    $app.classList.add("sidebar-open");
+  }
+
+  function newNote() {
+    var note = createNote();
+    notes.unshift(note);
+    saveNotes(notes);
+    selectNote(note.id);
+    $titleInput.focus();
+    editing = true;
+    $statusInfo.textContent = "新建笔记";
+  }
+
+  function saveCurrent() {
+    if (!activeId) return;
+    var note = null;
+    for (var i = 0; i < notes.length; i++) {
+      if (notes[i].id === activeId) { note = notes[i]; break; }
+    }
+    if (!note) return;
+    note.title = $titleInput.value.trim();
+    note.content = $content.value;
+    note.updatedAt = Date.now();
+    saveNotes(notes);
+    editing = false;
+    renderList($search.value);
+    $statusInfo.textContent = "已保存 " + formatDate(note.updatedAt);
+    showToast("笔记已保存");
+  }
+
+  function deleteNote(id) {
+    var note = null;
+    for (var i = 0; i < notes.length; i++) {
+      if (notes[i].id === id) { note = notes[i]; break; }
+    }
+    if (!note) return;
+    if (!confirm("确定要删除「" + (note.title || "无标题笔记") + "」吗？")) return;
+    notes = notes.filter(function(n) { return n.id !== id; });
+    saveNotes(notes);
+    if (activeId === id) {
+      activeId = null;
+      $editorArea.style.display = "none";
+      $emptyMain.style.display = "";
+      $app.classList.remove("sidebar-open");
+    }
+    renderList($search.value);
+    showToast("笔记已删除");
+  }
+
+  /* Event wiring */
+  $btnNew.addEventListener("click", newNote);
+  $btnSave.addEventListener("click", saveCurrent);
+  $btnBack.addEventListener("click", function() { $app.classList.remove("sidebar-open"); });
+
+  $noteList.addEventListener("click", function(e) {
+    var delBtn = e.target.closest(".btn-delete");
+    if (delBtn) { deleteNote(delBtn.getAttribute("data-id")); return; }
+    var item = e.target.closest(".note-item");
+    if (item) selectNote(item.getAttribute("data-id"));
+  });
+
+  $titleInput.addEventListener("input", function() { editing = true; updateWordCount(); });
+  $content.addEventListener("input", function() { editing = true; updateWordCount(); });
+  $search.addEventListener("input", function(e) { renderList(e.target.value); });
+
+  document.addEventListener("keydown", function(e) {
+    if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+      e.preventDefault();
+      if (activeId) saveCurrent();
+    }
+  });
+
+  /* ══════════════════════════════════════════
+     Test suite
+  ══════════════════════════════════════════ */
+  function runTests() {
+    window.alert = function() {};
+    var origConfirm = window.confirm;
+    window.confirm = function() { return true; };
+    var results = [];
+    var totalPass = 0, totalFail = 0;
+
+    function assert(condition, msg, detail) {
+      if (condition) { totalPass++; results.push({ pass: true, msg: msg, detail: detail || "" }); }
+      else { totalFail++; results.push({ pass: false, msg: msg, detail: detail || "" }); }
+    }
+    function assertEqual(actual, expected, msg, detail) {
+      assert(actual === expected, msg, (detail || "") + " | expected=" + JSON.stringify(expected) + " actual=" + JSON.stringify(actual));
+    }
+    function assertNotNull(actual, msg) { assert(actual !== null && actual !== undefined, msg); }
+    function assertTruthy(actual, msg) { assert(!!actual, msg); }
+    function assertFalsy(actual, msg) { assert(!actual, msg); }
+    function assertLength(arr, len, msg) { assert(arr.length === len, msg, "expected length=" + len + " got=" + arr.length); }
+
+    /* -- createNote -- */
+    (function() {
+      var s = "createNote";
+      var note = createNote("Hello", "World content");
+      assert(note.id && typeof note.id === "string", s + ": id 是字符串");
+      assertEqual(note.title, "Hello", s + ": title 正确");
+      assertEqual(note.content, "World content", s + ": content 正确");
+      assert(typeof note.updatedAt === "number", s + ": updatedAt 是数字");
+      assert(typeof note.createdAt === "number", s + ": createdAt 是数字");
+      assertEqual(note.updatedAt, note.createdAt, s + ": 创建时 updatedAt === createdAt");
+      var note2 = createNote("", "");
+      assertEqual(note2.title, "", s + ": 空标题保持为空字符串");
+      assertEqual(note2.content, "", s + ": 空内容保持为空字符串");
+      var note3 = createNote("  Trim me  ", "content");
+      assertEqual(note3.title, "Trim me", s + ": 标题 trim 生效");
+    })();
+
+    /* -- esc -- */
+    (function() {
+      var s = "esc (HTML转义)";
+      assertEqual(esc("<div>alert(1)</div>"), "&lt;div&gt;alert(1)&lt;/div&gt;", s + ": 转义 div 标签");
+      assertEqual(esc("hello"), "hello", s + ": 纯文本不变");
+      assertEqual(esc("a & b"), "a &amp; b", s + ": 转义 &");
+      assertEqual(esc(""), "", s + ": 空字符串不变");
+    })();
+
+    /* -- formatDate -- */
+    (function() {
+      var s = "formatDate";
+      var ts = new Date(2025, 0, 15, 9, 5).getTime();
+      assertEqual(formatDate(ts), "2025-01-15 09:05", s + ": 标准格式");
+      var ts2 = new Date(2025, 11, 31, 23, 59).getTime();
+      assertEqual(formatDate(ts2), "2025-12-31 23:59", s + ": 年末边界");
+    })();
+
+    /* -- CRUD -- */
+    (function() {
+      var s = "CRUD";
+      var origNotes = notes.slice();
+      var origActiveId = activeId;
+      notes = [];
+      localStorage.removeItem(STORAGE_KEY);
+
+      newNote();
+      assertLength(notes, 1, s + ": newNote 创建一条笔记");
+      var firstId = notes[0].id;
+      assertTruthy(firstId, s + ": 笔记有 id");
+
+      selectNote(firstId);
+      assertEqual(activeId, firstId, s + ": selectNote 设置 activeId");
+
+      $titleInput.value = "Updated Title";
+      $content.value = "Updated content here.";
+      saveCurrent();
+      assertEqual(notes[0].title, "Updated Title", s + ": saveCurrent 保存标题");
+      assertEqual(notes[0].content, "Updated content here.", s + ": saveCurrent 保存内容");
+
+      newNote();
+      assertLength(notes, 2, s + ": 第二条笔记创建成功");
+      var secondId = notes[0].id;
+
+      deleteNote(firstId);
+      assertLength(notes, 1, s + ": 删除后剩一条");
+      assertEqual(notes[0].id, secondId, s + ": 剩余的是第二条");
+
+      notes = origNotes;
+      activeId = origActiveId;
+      saveNotes(notes);
+      renderList($search.value);
+    })();
+
+    /* -- localStorage -- */
+    (function() {
+      var s = "localStorage (持久化)";
+      var testData = [{ id: "test_1", title: "持久化测试", content: "内容", updatedAt: 1000, createdAt: 1000 }];
+      saveNotes(testData);
+      var raw = localStorage.getItem(STORAGE_KEY);
+      assertTruthy(raw, s + ": localStorage 有数据");
+      var parsed = JSON.parse(raw);
+      assertLength(parsed, 1, s + ": 存储了一条笔记");
+      assertEqual(parsed[0].title, "持久化测试", s + ": 标题正确");
+      var loaded = loadNotes();
+      assertLength(loaded, 1, s + ": loadNotes 读取正确");
+      assertEqual(loaded[0].content, "内容", s + ": 内容正确");
+      localStorage.removeItem(STORAGE_KEY);
+    })();
+
+    /* -- renderList 空列表 -- */
+    (function() {
+      var s = "renderList (空列表)";
+      notes = [];
+      renderList("");
+      assertTruthy($noteList.innerHTML.indexOf("empty-list") !== -1, s + ": 空列表显示提示");
+    })();
+
+    /* -- renderList 有笔记 -- */
+    (function() {
+      var s = "renderList (有笔记渲染)";
+      notes = [
+        { id: "r1", title: "笔记A", content: "这是笔记A的内容", updatedAt: 2000, createdAt: 1000 },
+        { id: "r2", title: "笔记B", content: "笔记B的预览", updatedAt: 3000, createdAt: 1000 }
+      ];
+      renderList("");
+      assertTruthy($noteList.innerHTML.indexOf("笔记A") !== -1, s + ": 笔记A 出现在列表中");
+      assertTruthy($noteList.innerHTML.indexOf("笔记B") !== -1, s + ": 笔记B 出现在列表中");
+      var idxA = $noteList.innerHTML.indexOf("笔记A");
+      var idxB = $noteList.innerHTML.indexOf("笔记B");
+      assert(idxB < idxA, s + ": 按更新时间倒序排列(B 在 A 前)");
+    })();
+
+    /* -- renderList 搜索 -- */
+    (function() {
+      var s = "renderList (搜索过滤)";
+      notes = [
+        { id: "s1", title: "JavaScript 教程", content: "学习 JS", updatedAt: 3000, createdAt: 1000 },
+        { id: "s2", title: "Python 笔记", content: "学习 Python", updatedAt: 2000, createdAt: 1000 },
+        { id: "s3", title: "CSS 技巧", content: "JS 相关 CSS", updatedAt: 1000, createdAt: 1000 }
+      ];
+      renderList("JavaScript");
+      assertTruthy($noteList.innerHTML.indexOf("JavaScript 教程") !== -1, s + ": 标题匹配");
+      assertFalsy($noteList.innerHTML.indexOf("Python 笔记") !== -1, s + ": 不匹配的被过滤");
+      renderList("JS");
+      assertTruthy($noteList.innerHTML.indexOf("CSS 技巧") !== -1, s + ": 内容匹配");
+      assertFalsy($noteList.innerHTML.indexOf("Python 笔记") !== -1, s + ": 不匹配的被过滤");
+      renderList("不存在的搜索");
+      assertTruthy($noteList.innerHTML.indexOf("empty-list") !== -1, s + ": 无结果时显示空提示");
+    })();
+
+    /* -- renderList XSS 防护 -- */
+    (function() {
+      var s = "renderList (XSS防护)";
+      notes = [
+        { id: "x1", title: "<img src=x onerror=alert(1)>", content: "<b>bold</b>", updatedAt: 1000, createdAt: 1000 }
+      ];
+      renderList("");
+      assertFalsy($noteList.innerHTML.indexOf("<img src=x onerror=") !== -1, s + ": 标题中 HTML 被转义");
+      assertFalsy($noteList.innerHTML.indexOf("<script>alert") !== -1, s + ": 内容中 script 被转义");
+    })();
+
+    /* -- selectNote 空列表安全 -- */
+    (function() {
+      var s = "selectNote (空列表时安全)";
+      notes = [];
+      selectNote("nonexistent");
+      assertEqual(activeId, "nonexistent", s + ": activeId 被设置(即使笔记不存在)");
+      assertEqual($editorArea.style.display, "none", s + ": 不存在的笔记不打开编辑器");
+    })();
+
+    /* -- 字数统计 -- */
+    (function() {
+      var s = "updateWordCount (字数统计)";
+      $content.value = "Hello 世界";
+      $content.dispatchEvent(new Event("input"));
+      assertTruthy($wordCount.textContent.indexOf("6") !== -1, s + ": 字数正确");
+      $content.value = "";
+      $content.dispatchEvent(new Event("input"));
+      assertTruthy($wordCount.textContent.indexOf("0") !== -1, s + ": 空内容字数为 0");
+    })();
+
+    /* -- deleteNote 取消 -- */
+    (function() {
+      var s = "deleteNote (取消删除)";
+      notes = [{ id: "d1", title: "不要删我", content: "内容", updatedAt: 1000, createdAt: 1000 }];
+      var origConfirm = window.confirm;
+      window.confirm = function() { return false; };
+      deleteNote("d1");
+      window.confirm = origConfirm;
+      assertLength(notes, 1, s + ": 取消删除后笔记保留");
+    })();
+
+    /* -- toast -- */
+    (function() {
+      var s = "showToast (Toast提示)";
+      assertTruthy($toast, s + ": toast 元素存在");
+      assertEqual($toast.classList.contains("show"), false, s + ": 初始状态无 show class");
+    })();
+
+    /* Restore state */
+    notes = loadNotes();
+    activeId = null;
+    $editorArea.style.display = "none";
+    $emptyMain.style.display = "";
+    renderList("");
+    window.confirm = origConfirm;
+
+    /* Render results */
+    var html = "";
+    var currentSuite = "";
+    for (var i = 0; i < results.length; i++) {
+      var r = results[i];
+      var suite = r.msg.split(" — ")[0].split(" (")[0];
+      if (suite !== currentSuite) {
+        if (currentSuite !== "") html += "</div>";
+        currentSuite = suite;
+        html += "<div class=\"test-suite\"><div class=\"test-suite-title\">" + esc(currentSuite) + "</div>";
+      }
+      var cls = r.pass ? "test-item pass" : "test-item fail";
+      var icon = r.pass ? "✓" : "✗";
+      html += "<div class=\"" + cls + "\"><span class=\"icon\">" + icon + "</span>" + esc(r.msg) + "</div>";
+      if (r.detail) {
+        html += "<div style=\"padding:2px 10px 4px 34px; font-size:11px; color:#888;\">" + esc(r.detail) + "</div>";
+      }
+    }
+    if (currentSuite !== "") html += "</div>";
+
+    var sumCls = totalFail === 0 ? "test-summary all-pass" : "test-summary has-fail";
+    var sumMsg = totalFail === 0
+      ? "🎉 全部通过！共 " + totalPass + " 项测试"
+      : "⚠️ " + totalFail + " 项失败，" + totalPass + " 项通过";
+    html += "<div class=\"" + sumCls + "\">" + sumMsg + "</div>";
+
+    $testResults.innerHTML = html;
+    $testPanel.classList.add("open");
+  }
+
+  $btnTest.addEventListener("click", runTests);
+  $testPanelClose.addEventListener("click", function() { $testPanel.classList.remove("open"); });
+
+  /* Expose for external testing */
+  window.__markNotes = {
+    loadNotes: loadNotes,
+    saveNotes: saveNotes,
+    createNote: createNote,
+    getNotes: function() { return notes; },
+    setNotes: function(n) { notes = n; },
+    getActiveId: function() { return activeId; },
+    renderList: renderList,
+    selectNote: selectNote,
+    newNote: newNote,
+    saveCurrent: saveCurrent,
+    deleteNote: deleteNote,
+    formatDate: formatDate,
+    esc: esc,
+    runTests: runTests
+  };
+
+  /* Init */
+  renderList();
+  if (notes.length > 0) {
+    var sorted = notes.slice().sort(function(a,b) { return b.updatedAt - a.updatedAt; });
+    selectNote(sorted[0].id);
+  }
+})();
+</script>
+</body>
+</html>
